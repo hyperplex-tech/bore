@@ -81,10 +81,12 @@ RestartSec=5
 # Environment=BORE_SOCKET=%h/.local/share/bore/bored.sock
 # Environment=BORE_LOG_LEVEL=info
 
-# Inherit SSH agent from the user session.
-# If using ssh-agent via systemd, this is automatic.
-# Otherwise, you may need to set SSH_AUTH_SOCK explicitly:
-# Environment=SSH_AUTH_SOCK=%t/ssh-agent.socket
+# Pass the SSH agent socket so the daemon can authenticate.
+# The daemon also auto-discovers common socket paths, but setting this
+# ensures it works even if the socket is in a non-standard location.
+# %t expands to XDG_RUNTIME_DIR (e.g. /run/user/1000).
+# GNOME Keyring:
+Environment=SSH_AUTH_SOCK=%t/keyring/ssh
 
 [Install]
 WantedBy=default.target

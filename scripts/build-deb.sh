@@ -106,6 +106,10 @@ ExecStart=/usr/bin/bored
 Restart=on-failure
 RestartSec=5
 
+# Pass the SSH agent socket so the daemon can authenticate.
+# %t expands to XDG_RUNTIME_DIR (e.g. /run/user/1000).
+Environment=SSH_AUTH_SOCK=%t/keyring/ssh
+
 [Install]
 WantedBy=default.target
 EOF
