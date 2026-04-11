@@ -1,0 +1,112 @@
+syntax = "proto3";
+package bore.v1;
+option go_package = "bore/v1";
+
+import "google/protobuf/timestamp.proto";
+
+enum TunnelStatus {
+  TUNNEL_STATUS_UNSPECIFIED = 0;
+  TUNNEL_STATUS_STOPPED     = 1;
+  TUNNEL_STATUS_CONNECTING  = 2;
+  TUNNEL_STATUS_ACTIVE      = 3;
+  TUNNEL_STATUS_ERROR       = 4;
+  TUNNEL_STATUS_PAUSED      = 5;
+}
+
+enum TunnelType {
+  TUNNEL_TYPE_UNSPECIFIED = 0;
+  TUNNEL_TYPE_LOCAL       = 1;
+  TUNNEL_TYPE_REMOTE      = 2;
+  TUNNEL_TYPE_DYNAMIC     = 3;
+  TUNNEL_TYPE_K8S         = 4;
+}
+
+message Tunnel {
+  string name            = 1;
+  string group           = 2;
+  TunnelType type        = 3;
+  TunnelStatus status    = 4;
+  int32 local_port       = 5;
+  string local_host      = 6;
+  string remote_host     = 7;
+  int32 remote_port      = 8;
+  string ssh_host        = 9;
+  int32 ssh_port         = 10;
+  string ssh_user        = 11;
+  string auth_method     = 12;
+  string identity_file   = 13;
+  repeated string jump_hosts = 14;
+  string error_message   = 15;
+  google.protobuf.Timestamp connected_at  = 16;
+  google.protobuf.Timestamp last_error_at = 17;
+  int32 retry_count      = 18;
+  int32 next_retry_secs  = 19;
+  string k8s_context     = 20;
+  string k8s_namespace   = 21;
+  string k8s_resource    = 22;
+}
+
+message ConnectRequest {
+  repeated string names = 1;
+  string group          = 2;
+}
+
+message ConnectResponse {
+  repeated Tunnel tunnels = 1;
+}
+
+message DisconnectRequest {
+  repeated string names = 1;
+  string group          = 2;
+}
+
+message DisconnectResponse {
+  repeated Tunnel tunnels = 1;
+}
+
+message ListRequest {
+  string group               = 1;
+  TunnelStatus status_filter = 2;
+}
+
+message ListResponse {
+  repeated Tunnel tunnels = 1;
+}
+
+message PauseRequest {
+  string name = 1;
+}
+
+message PauseResponse {
+  Tunnel tunnel = 1;
+}
+
+message RetryRequest {
+  string name = 1;
+}
+
+message RetryResponse {
+  Tunnel tunnel = 1;
+}
+
+message GetLogsRequest {
+  string name = 1;
+  int32 tail  = 2;
+  bool follow = 3;
+}
+
+message LogEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string level        = 2;
+  string message      = 3;
+  string tunnel_name  = 4;
+}
+
+service TunnelService {
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+  rpc List(ListRequest) returns (ListResponse);
+  rpc Pause(PauseRequest) returns (PauseResponse);
+  rpc Retry(RetryRequest) returns (RetryResponse);
+  rpc GetLogs(GetLogsRequest) returns (stream LogEntry);
+}

@@ -1,0 +1,356 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  # ── Cross-compile CLI, daemon, TUI for all platforms (no CGo) ───
+  build-cli:
+    name: CLI binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install protobuf tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf code
+        run: make proto
+
+      - name: Build frontend (for release target)
+        run: make build-frontend
+
+      - name: Cross-compile all platforms
+        run: make release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-binaries
+          path: bin/release/
+
+  # ── Linux .deb packages (amd64 + arm64) ─────────────────────────
+  build-linux-deb:
+    name: Linux .deb (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler pkg-config libwebkit2gtk-4.1-dev build-essential
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf code
+        run: make proto
+
+      - name: Build all binaries
+        run: make build
+
+      - name: Build .deb
+        run: ./scripts/build-deb.sh "" ${{ matrix.arch }}
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb-${{ matrix.arch }}
+          path: bin/bore_*.deb
+
+  # ── macOS .dmg installers (arm64 + amd64) ───────────────────────
+  build-macos-dmg:
+    name: macOS .dmg (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+          - arch: amd64
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install system dependencies
+        run: brew install protobuf
+
+      - name: Install Go protobuf tools
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf code
+        run: make proto
+
+      - name: Build all binaries
+        env:
+          CGO_LDFLAGS: "-framework UniformTypeIdentifiers"
+        run: make build
+
+      - name: Build .dmg
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          ./scripts/build-dmg.sh "$VERSION-${{ matrix.arch }}"
+
+      - name: Upload .dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg-${{ matrix.arch }}
+          path: bin/Bore-*.dmg
+
+  # ── Windows .exe installer (amd64 + arm64) ──────────────────────
+  build-windows-installer:
+    name: Windows installer (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install system dependencies
+        run: |
+          choco install protoc innosetup -y
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf code
+        run: make proto
+
+      - name: Build all binaries
+        run: make build
+
+      - name: Import code signing certificate
+        if: env.SIGN_CERT_PFX != ''
+        env:
+          SIGN_CERT_PFX: ${{ secrets.SIGN_CERT_PFX }}
+          SIGN_CERT_PASSWORD: ${{ secrets.SIGN_CERT_PASSWORD }}
+        run: |
+          $pfxBytes = [Convert]::FromBase64String($env:SIGN_CERT_PFX)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+          $securePassword = ConvertTo-SecureString $env:SIGN_CERT_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
+          Remove-Item $pfxPath
+          Write-Host "Certificate imported"
+
+      - name: Sign binaries
+        if: env.SIGN_CERT_PFX != ''
+        env:
+          SIGN_CERT_PFX: ${{ secrets.SIGN_CERT_PFX }}
+          SIGN_THUMBPRINT: ${{ secrets.SIGN_CERT_THUMBPRINT }}
+        run: |
+          $signtool = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\*\bin\*\x64\signtool.exe" |
+                       Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          foreach ($bin in Get-ChildItem bin\*.exe -Exclude Bore-Setup-*) {
+            Write-Host "Signing $($bin.Name)..."
+            & $signtool sign /sha1 $env:SIGN_THUMBPRINT /fd SHA256 /t http://timestamp.digicert.com $bin.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Failed to sign $($bin.Name)" }
+          }
+
+      - name: Build installer
+        run: |
+          $version = git describe --tags --always --dirty 2>$null
+          if (-not $version) { $version = "dev" }
+          iscc /DVERSION="$version-${{ matrix.arch }}" scripts/bore-installer.iss
+
+      - name: Sign installer
+        if: env.SIGN_CERT_PFX != ''
+        env:
+          SIGN_CERT_PFX: ${{ secrets.SIGN_CERT_PFX }}
+          SIGN_THUMBPRINT: ${{ secrets.SIGN_CERT_THUMBPRINT }}
+        run: |
+          $signtool = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\*\bin\*\x64\signtool.exe" |
+                       Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          foreach ($installer in Get-ChildItem bin\Bore-Setup-*.exe) {
+            Write-Host "Signing $($installer.Name)..."
+            & $signtool sign /sha1 $env:SIGN_THUMBPRINT /fd SHA256 /t http://timestamp.digicert.com $installer.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Failed to sign $($installer.Name)" }
+          }
+
+      - name: Rename installer with arch
+        run: |
+          Get-ChildItem bin/Bore-Setup-*.exe | ForEach-Object {
+            $newName = $_.Name -replace '\.exe$', '-${{ matrix.arch }}.exe'
+            Rename-Item $_.FullName $newName
+          }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-${{ matrix.arch }}
+          path: bin/Bore-Setup-*.exe
+
+  # ── Create GitHub Release with all artifacts ────────────────────
+  release:
+    name: Create Release
+    needs: [build-cli, build-linux-deb, build-macos-dmg, build-windows-installer]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+
+          # CLI/daemon/TUI binaries — tar.gz for Unix, zip for Windows
+          for f in artifacts/cli-binaries/*; do
+            name=$(basename "$f")
+            if [[ "$name" == *.exe ]]; then
+              zip "release-assets/${name%.exe}.zip" -j "$f"
+            else
+              chmod +x "$f"
+              tar czf "release-assets/${name}.tar.gz" -C artifacts/cli-binaries "$name"
+            fi
+          done
+
+          # Linux .deb packages (amd64 + arm64)
+          cp artifacts/linux-deb-amd64/*.deb release-assets/
+          cp artifacts/linux-deb-arm64/*.deb release-assets/
+
+          # macOS .dmg installers (arm64 + amd64)
+          cp artifacts/macos-dmg-arm64/*.dmg release-assets/
+          cp artifacts/macos-dmg-amd64/*.dmg release-assets/
+
+          # Windows installers (amd64 + arm64)
+          cp artifacts/windows-installer-amd64/*.exe release-assets/
+          cp artifacts/windows-installer-arm64/*.exe release-assets/
+
+          echo ""
+          echo "=== Release assets ==="
+          ls -lh release-assets/
+
+      - name: Generate changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$CURRENT_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG".."$CURRENT_TAG" --no-merges)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          cat > changelog.md << 'HEADER'
+          ## Downloads
+
+          ### Installers (recommended)
+
+          | Platform | Architecture | File |
+          |----------|-------------|------|
+          | **Linux** (Debian/Ubuntu) | x86_64 (amd64) | `bore_*_amd64.deb` |
+          | **Linux** (Debian/Ubuntu) | ARM64 | `bore_*_arm64.deb` |
+          | **macOS** | Apple Silicon (arm64) | `Bore-*-arm64.dmg` |
+          | **macOS** | Intel (amd64) | `Bore-*-amd64.dmg` |
+          | **Windows** | x86_64 (amd64) | `Bore-Setup-*-amd64.exe` |
+          | **Windows** | ARM64 | `Bore-Setup-*-arm64.exe` |
+
+          ### Standalone binaries
+
+          Also available as standalone archives (CLI + daemon + TUI, no desktop GUI):
+
+          | Platform | Architecture | CLI | Daemon | TUI |
+          |----------|-------------|-----|--------|-----|
+          | Linux | x86_64 | `bore-linux-amd64` | `bored-linux-amd64` | `bore-tui-linux-amd64` |
+          | Linux | ARM64 | `bore-linux-arm64` | `bored-linux-arm64` | `bore-tui-linux-arm64` |
+          | macOS | Apple Silicon | `bore-darwin-arm64` | `bored-darwin-arm64` | `bore-tui-darwin-arm64` |
+          | macOS | Intel | `bore-darwin-amd64` | `bored-darwin-amd64` | `bore-tui-darwin-amd64` |
+          | Windows | x86_64 | `bore-windows-amd64` | `bored-windows-amd64` | `bore-tui-windows-amd64` |
+          | Windows | ARM64 | `bore-windows-arm64` | `bored-windows-arm64` | `bore-tui-windows-arm64` |
+
+          ### Quick install
+
+          **Linux:**
+          ```bash
+          sudo dpkg -i bore_*_amd64.deb
+          systemctl --user enable --now bored
+          ```
+
+          **macOS:** Open the `.dmg`, drag Bore.app to Applications, double-click "Install CLI Tools".
+
+          **Windows:** Run the `.exe` installer.
+
+          HEADER
+
+          if [ -n "$CHANGELOG" ]; then
+            echo -e "## What's Changed\n\n${CHANGELOG}" >> changelog.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: changelog.md
+          files: release-assets/*
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          generate_release_notes: false

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Bore
+Comment=SSH Tunnel Manager
+Exec=bore-desktop
+Icon=bore
+Terminal=false
+Type=Application
+Categories=Network;Utility;
+Keywords=ssh;tunnel;port;forward;
+StartupWMClass=bore-desktop

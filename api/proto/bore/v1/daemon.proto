@@ -1,0 +1,35 @@
+syntax = "proto3";
+package bore.v1;
+option go_package = "bore/v1";
+
+message StatusRequest {}
+
+message StatusResponse {
+  string version           = 1;
+  int32 active_tunnels     = 2;
+  int32 total_tunnels      = 3;
+  string socket_path       = 4;
+  string config_path       = 5;
+  bool ssh_agent_available = 6;
+  int32 ssh_agent_keys     = 7;
+  bool tailscale_available = 8;
+  bool tailscale_connected = 9;
+  string tailscale_ip      = 10;
+  string tailscale_hostname = 11;
+}
+
+message ShutdownRequest {}
+
+message ShutdownResponse {}
+
+message ReloadConfigRequest {}
+
+message ReloadConfigResponse {
+  int32 tunnels_loaded = 1;
+}
+
+service DaemonService {
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  rpc ReloadConfig(ReloadConfigRequest) returns (ReloadConfigResponse);
+}

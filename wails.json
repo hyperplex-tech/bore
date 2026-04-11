@@ -1,0 +1,14 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "bore-desktop",
+  "outputfilename": "bore-desktop",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "frontend:dir": "desktop/frontend",
+  "wailsjsdir": "desktop/frontend/src/wailsjs",
+  "author": {
+    "name": "Petar"
+  }
+}

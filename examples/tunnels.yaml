@@ -1,0 +1,33 @@
+version: 1
+
+defaults:
+  ssh_user: ubuntu
+  auth_method: agent
+  reconnect: true
+  keepalive_interval: 30s
+
+groups:
+  dev:
+    description: "Local development tunnels"
+    tunnels:
+      - name: dev-postgres
+        type: local
+        local_port: 5432
+        remote_host: 127.0.0.1
+        remote_port: 5432
+        ssh_host: bastion.example.com
+
+      - name: dev-redis
+        type: local
+        local_port: 6379
+        remote_host: 127.0.0.1
+        remote_port: 6379
+        ssh_host: bastion.example.com
+
+  proxy:
+    description: "SOCKS proxy"
+    tunnels:
+      - name: socks
+        type: dynamic
+        local_port: 1080
+        ssh_host: bastion.example.com
