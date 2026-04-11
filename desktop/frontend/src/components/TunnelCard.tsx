@@ -3,6 +3,7 @@ import type { Tunnel } from "../types/tunnel";
 
 interface TunnelCardProps {
   tunnel: Tunnel;
+  autoRefresh: boolean;
   onConnect: (name: string) => void;
   onDisconnect: (name: string) => void;
   onRetry: (name: string) => void;
@@ -10,6 +11,7 @@ interface TunnelCardProps {
   onDuplicate: (name: string) => void;
   onDelete: (name: string) => void;
   onViewLogs: (name: string) => void;
+  onToggleAutoRefresh: (name: string) => void;
 }
 
 function formatUptime(connectedAt: string): string {
@@ -44,6 +46,7 @@ const statusBorderColors: Record<string, string> = {
 
 export const TunnelCard: React.FC<TunnelCardProps> = ({
   tunnel,
+  autoRefresh,
   onConnect,
   onDisconnect,
   onRetry,
@@ -51,6 +54,7 @@ export const TunnelCard: React.FC<TunnelCardProps> = ({
   onDuplicate,
   onDelete,
   onViewLogs,
+  onToggleAutoRefresh,
 }) => {
   const isActive = tunnel.status === "active";
   const isConnecting = tunnel.status === "connecting";
@@ -188,6 +192,36 @@ export const TunnelCard: React.FC<TunnelCardProps> = ({
             </span>
           </>
         ) : null}
+      </div>
+
+      {/* Auto-Refresh toggle */}
+      <div className="flex items-center gap-2 mt-1.5">
+        <button
+          onClick={() => onToggleAutoRefresh(tunnel.name)}
+          className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+            autoRefresh ? "bg-bore-accent" : "bg-bore-border"
+          }`}
+          title={autoRefresh ? "Disable auto-refresh" : "Enable auto-refresh"}
+        >
+          <span
+            className={`inline-block h-2.5 w-2.5 rounded-full bg-white transition-transform ${
+              autoRefresh ? "translate-x-3.5" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+        <span className="text-[10px] text-bore-text-muted select-none">
+          Auto-Refresh
+        </span>
+        {autoRefresh && (isError || isRetrying || isStopped || isPaused) && (
+          <span className="text-[10px] text-bore-warning animate-pulse">
+            reconnecting in ~5s...
+          </span>
+        )}
+        {!autoRefresh && (
+          <span className="text-[10px] text-bore-text-dim">
+            Reconnects every 5s if tunnel drops
+          </span>
+        )}
       </div>
 
       {/* Error message */}

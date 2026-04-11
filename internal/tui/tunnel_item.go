@@ -10,16 +10,20 @@ import (
 	borev1 "github.com/hyperplex-tech/bore/gen/bore/v1"
 )
 
-func renderTunnelItem(t *borev1.Tunnel, selected bool, width int, s styles) string {
+func renderTunnelItem(t *borev1.Tunnel, selected bool, width int, s styles, autoRefresh bool) string {
 	status := protoStatus(t.Status)
 	dot := statusDot(s, status)
 
-	// Line 1: dot + name + status badge + action hint
+	// Line 1: dot + name + status badge + auto-refresh indicator + action hint
 	name := s.tunnelName.Render(t.Name)
 	statusBadge := renderStatusBadge(t, s)
+	arBadge := ""
+	if autoRefresh {
+		arBadge = " " + lipgloss.NewStyle().Foreground(lipgloss.Color("#4a9eff")).Render("↻auto")
+	}
 	hint := renderActionHint(t, s)
 
-	line1Left := fmt.Sprintf(" %s %s  %s", dot, name, statusBadge)
+	line1Left := fmt.Sprintf(" %s %s  %s%s", dot, name, statusBadge, arBadge)
 	line1Right := hint
 	gap := width - lipgloss.Width(line1Left) - lipgloss.Width(line1Right) - 2
 	if gap < 1 {

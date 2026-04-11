@@ -262,6 +262,13 @@ func tickCmd() tea.Cmd {
 	}
 }
 
+func autoRefreshTickCmd() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(5 * time.Second)
+		return autoRefreshTickMsg{}
+	}
+}
+
 func delayedResubscribe(clients *cli.Clients) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(2 * time.Second)

@@ -22,6 +22,7 @@ type keyMap struct {
 	Duplicate     key.Binding
 	Rename        key.Binding
 	Import        key.Binding
+	AutoRefresh   key.Binding
 	Escape        key.Binding
 }
 
@@ -46,6 +47,7 @@ func defaultKeyMap() keyMap {
 		Duplicate:     key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "duplicate")),
 		Rename:        key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rename")),
 		Import:        key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "import SSH")),
+		AutoRefresh:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "toggle auto-refresh")),
 		Escape:        key.NewBinding(key.WithKeys("esc"), key.WithHelp("Esc", "close/clear")),
 	}
 }

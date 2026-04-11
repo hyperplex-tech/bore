@@ -45,6 +45,8 @@ function App() {
   const [showLogPanel, setShowLogPanel] = useState(false);
   const [logPanelFilter, setLogPanelFilter] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const [autoRefresh, setAutoRefresh] = useState<Set<string>>(new Set());
+  const autoRefreshTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const refresh = useCallback(async () => {
     try {
@@ -110,6 +112,58 @@ function App() {
     },
     [refresh],
   );
+
+  const handleToggleAutoRefresh = useCallback((name: string) => {
+    setAutoRefresh((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }, []);
+
+  // Auto-refresh effect: schedule 5s retry for downed tunnels with auto-refresh on.
+  // Uses the ref for timer tracking so polling-driven re-renders don't reset timers.
+  useEffect(() => {
+    const timers = autoRefreshTimers.current;
+
+    for (const tunnel of tunnels) {
+      const isDown =
+        tunnel.status === "error" ||
+        tunnel.status === "stopped" ||
+        tunnel.status === "paused" ||
+        tunnel.status === "retrying";
+      const hasAutoRefresh = autoRefresh.has(tunnel.name);
+
+      if (hasAutoRefresh && isDown && !timers.has(tunnel.name)) {
+        const name = tunnel.name;
+        const timer = setTimeout(async () => {
+          timers.delete(name);
+          await ConnectTunnels([name], "");
+          refresh();
+        }, 5000);
+        timers.set(name, timer);
+      } else if ((!hasAutoRefresh || !isDown) && timers.has(tunnel.name)) {
+        clearTimeout(timers.get(tunnel.name)!);
+        timers.delete(tunnel.name);
+      }
+    }
+    // No cleanup — timers are managed via the ref and cleared individually.
+    // Unmount cleanup is handled by the separate effect below.
+  }, [tunnels, autoRefresh, refresh]);
+
+  // Cleanup all auto-refresh timers on unmount only.
+  useEffect(() => {
+    return () => {
+      for (const timer of autoRefreshTimers.current.values()) {
+        clearTimeout(timer);
+      }
+      autoRefreshTimers.current.clear();
+    };
+  }, []);
 
   const handleConnectAll = useCallback(async () => {
     await GoConnectAll();
@@ -290,6 +344,7 @@ function App() {
 
         <TunnelList
           tunnels={filteredTunnels}
+          autoRefresh={autoRefresh}
           onConnect={handleConnect}
           onDisconnect={handleDisconnect}
           onRetry={handleRetry}
@@ -300,6 +355,7 @@ function App() {
             setLogPanelFilter(name);
             setShowLogPanel(true);
           }}
+          onToggleAutoRefresh={handleToggleAutoRefresh}
         />
 
         <LogPanel

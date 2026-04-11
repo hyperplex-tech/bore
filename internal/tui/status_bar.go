@@ -8,9 +8,10 @@ import (
 )
 
 type statusBar struct {
-	status *borev1.StatusResponse
-	width  int
-	err    error
+	status           *borev1.StatusResponse
+	width            int
+	err              error
+	autoRefreshCount int
 }
 
 func (sb *statusBar) view(s styles) string {
@@ -31,6 +32,10 @@ func (sb *statusBar) view(s styles) string {
 		parts = append(parts, fmt.Sprintf("Tailscale: connected (%s)", sb.status.TailscaleIp))
 	} else if sb.status.TailscaleAvailable {
 		parts = append(parts, "Tailscale: disconnected")
+	}
+
+	if sb.autoRefreshCount > 0 {
+		parts = append(parts, fmt.Sprintf("Auto-refresh: %d tunnel(s)", sb.autoRefreshCount))
 	}
 
 	path := sb.status.ConfigPath

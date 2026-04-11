@@ -4,6 +4,7 @@ import { TunnelCard } from "./TunnelCard";
 
 interface TunnelListProps {
   tunnels: Tunnel[];
+  autoRefresh: Set<string>;
   onConnect: (name: string) => void;
   onDisconnect: (name: string) => void;
   onRetry: (name: string) => void;
@@ -11,6 +12,7 @@ interface TunnelListProps {
   onDuplicate: (name: string) => void;
   onDelete: (name: string) => void;
   onViewLogs: (name: string) => void;
+  onToggleAutoRefresh: (name: string) => void;
 }
 
 const statusFilters: { label: string; value: TunnelStatus | "all" }[] = [
@@ -24,6 +26,7 @@ const statusFilters: { label: string; value: TunnelStatus | "all" }[] = [
 
 export const TunnelList: React.FC<TunnelListProps> = ({
   tunnels,
+  autoRefresh,
   onConnect,
   onDisconnect,
   onRetry,
@@ -31,6 +34,7 @@ export const TunnelList: React.FC<TunnelListProps> = ({
   onDuplicate,
   onDelete,
   onViewLogs,
+  onToggleAutoRefresh,
 }) => {
   const [statusFilter, setStatusFilter] = useState<TunnelStatus | "all">(
     "all",
@@ -106,6 +110,7 @@ export const TunnelList: React.FC<TunnelListProps> = ({
             <TunnelCard
               key={t.name}
               tunnel={t}
+              autoRefresh={autoRefresh.has(t.name)}
               onConnect={onConnect}
               onDisconnect={onDisconnect}
               onRetry={onRetry}
@@ -113,6 +118,7 @@ export const TunnelList: React.FC<TunnelListProps> = ({
               onDuplicate={onDuplicate}
               onDelete={onDelete}
               onViewLogs={onViewLogs}
+              onToggleAutoRefresh={onToggleAutoRefresh}
             />
           ))
         )}

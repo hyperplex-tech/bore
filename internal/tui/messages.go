@@ -80,3 +80,5 @@ type tunnelConfigLoadedMsg struct {
 // --- UI ---
 
 type tickMsg struct{}
+
+type autoRefreshTickMsg struct{}

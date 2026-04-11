@@ -83,7 +83,7 @@ func (tl *tunnelList) ensureVisible() {
 	}
 }
 
-func (tl *tunnelList) view(s styles) string {
+func (tl *tunnelList) view(s styles, autoRefresh ...map[string]bool) string {
 	if len(tl.filtered) == 0 {
 		return s.tunnelDim.Render("\n  No tunnels to display")
 	}
@@ -100,9 +100,13 @@ func (tl *tunnelList) view(s styles) string {
 		end = len(tl.filtered)
 	}
 
+	ar := map[string]bool{}
+	if len(autoRefresh) > 0 && autoRefresh[0] != nil {
+		ar = autoRefresh[0]
+	}
 	for i := tl.offset; i < end; i++ {
 		selected := i == tl.cursor && tl.focused
-		b.WriteString(renderTunnelItem(tl.filtered[i], selected, tl.width, s))
+		b.WriteString(renderTunnelItem(tl.filtered[i], selected, tl.width, s, ar[tl.filtered[i].Name]))
 		b.WriteString("\n")
 	}
 

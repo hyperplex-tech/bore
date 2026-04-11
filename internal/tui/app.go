@@ -44,6 +44,10 @@ type Model struct {
 	// For edit: store the tunnel being edited so we can pass config to the form.
 	editingTunnel *borev1.Tunnel
 
+	// Auto-refresh: tunnels that should auto-reconnect every 5s when down.
+	autoRefresh       map[string]bool
+	autoRefreshTicking bool
+
 	focus  focusArea
 	width  int
 	height int
@@ -53,16 +57,17 @@ type Model struct {
 // NewModel creates the initial TUI model.
 func NewModel(clients *cli.Clients) Model {
 	return Model{
-		clients:   clients,
-		keys:      defaultKeyMap(),
-		styles:    newStyles(),
-		sidebar:   newSidebar(),
-		tunnelList: newTunnelList(),
-		filter:    newFilterInput(),
-		form:      newTunnelForm(),
-		sshImport: newSSHImport(),
-		groupIn:   newGroupInput(),
-		focus:     focusMain,
+		clients:     clients,
+		keys:        defaultKeyMap(),
+		styles:      newStyles(),
+		sidebar:     newSidebar(),
+		tunnelList:  newTunnelList(),
+		filter:      newFilterInput(),
+		form:        newTunnelForm(),
+		sshImport:   newSSHImport(),
+		groupIn:     newGroupInput(),
+		autoRefresh: make(map[string]bool),
+		focus:       focusMain,
 	}
 }
 
@@ -210,6 +215,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Tick ---
 	case tickMsg:
 		return m, tea.Batch(refreshStatus(m.clients), tickCmd())
+
+	// --- Auto-refresh tick ---
+	case autoRefreshTickMsg:
+		if len(m.autoRefresh) == 0 {
+			m.autoRefreshTicking = false
+			return m, nil
+		}
+		var cmds []tea.Cmd
+		for name := range m.autoRefresh {
+			for _, t := range m.tunnelList.tunnels {
+				if t.Name != name {
+					continue
+				}
+				s := protoStatus(t.Status)
+				if s == "error" || s == "stopped" || s == "paused" || s == "retrying" {
+					cmds = append(cmds, connectTunnel(m.clients, name))
+				}
+			}
+		}
+		cmds = append(cmds, autoRefreshTickCmd())
+		return m, tea.Batch(cmds...)
 	}
 
 	return m, nil
@@ -416,6 +442,19 @@ func (m Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editingTunnel = t
 			return m, loadTunnelConfig(t.Name)
 		}
+	case key.Matches(msg, m.keys.AutoRefresh):
+		if t := m.tunnelList.selectedTunnel(); t != nil {
+			if m.autoRefresh[t.Name] {
+				delete(m.autoRefresh, t.Name)
+			} else {
+				m.autoRefresh[t.Name] = true
+			}
+			// Start the tick loop if not already running.
+			if len(m.autoRefresh) > 0 && !m.autoRefreshTicking {
+				m.autoRefreshTicking = true
+				return m, autoRefreshTickCmd()
+			}
+		}
 	}
 	return m, nil
 }
@@ -536,7 +575,7 @@ func (m Model) View() tea.View {
 	if filterBar != "" {
 		mainContent = filterBar + "\n"
 	}
-	mainContent += m.tunnelList.view(m.styles)
+	mainContent += m.tunnelList.view(m.styles, m.autoRefresh)
 	if m.logViewer.visible {
 		mainContent += "\n" + m.logViewer.view(m.styles)
 	}
@@ -549,6 +588,7 @@ func (m Model) View() tea.View {
 	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainPanel)
 
 	// Status bar.
+	m.statusBar.autoRefreshCount = len(m.autoRefresh)
 	status := m.statusBar.view(m.styles)
 
 	screen := lipgloss.JoinVertical(lipgloss.Left, title, content, status)

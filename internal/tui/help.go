@@ -46,6 +46,7 @@ func (h *helpOverlay) view(s styles) string {
 			{"a", "Add new tunnel"},
 			{"e", "Edit selected tunnel"},
 			{"p", "Duplicate selected tunnel"},
+			{"A", "Toggle auto-refresh (retry every 5s)"},
 		}},
 		{"Bulk Actions", [][2]string{
 			{"C", "Connect all tunnels (or group in sidebar)"},
