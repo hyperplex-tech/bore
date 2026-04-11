@@ -359,7 +359,7 @@ func TestNewProviderFactory(t *testing.T) {
 		want   string
 	}{
 		{"key", "*auth.KeyProvider"},
-		{"agent", "*auth.AgentProvider"},
+		{"agent", "*auth.CompositeProvider"},
 		{"cert", "*auth.CertProvider"},
 		{"", "*auth.CompositeProvider"},
 		{"auto", "*auth.CompositeProvider"},
