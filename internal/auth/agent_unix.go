@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/ssh/agent"
 )
 
 // dialAgent connects to the SSH agent on Linux.
@@ -20,15 +22,32 @@ func dialAgent() (net.Conn, error) {
 		return nil, fmt.Errorf("SSH agent not found (checked SSH_AUTH_SOCK, XDG_RUNTIME_DIR, and /tmp)")
 	}
 
-	var lastErr error
+	// Try each candidate socket. Prefer one that actually has keys loaded,
+	// since a system may have multiple agents (e.g. gpg-agent with no keys
+	// and gnome-keyring with keys loaded).
+	var firstConn net.Conn
 	for _, sock := range candidates {
 		conn, err := net.Dial("unix", sock)
-		if err == nil {
+		if err != nil {
+			continue
+		}
+		// Check if this agent has keys.
+		ag := agent.NewClient(conn)
+		keys, err := ag.List()
+		if err == nil && len(keys) > 0 {
 			return conn, nil
 		}
-		lastErr = err
+		// Connectable but no keys — keep as fallback.
+		if firstConn == nil {
+			firstConn = conn
+		} else {
+			conn.Close()
+		}
 	}
-	return nil, fmt.Errorf("connecting to SSH agent: %w", lastErr)
+	if firstConn != nil {
+		return firstConn, nil
+	}
+	return nil, fmt.Errorf("SSH agent not found (checked SSH_AUTH_SOCK, XDG_RUNTIME_DIR, and /tmp)")
 }
 
 // findAgentSockets returns candidate SSH agent socket paths in priority order.
